@@ -150,3 +150,38 @@ test("Async functions frame should be included in stack trace", async () => {
         at async <anonymous> (file:NN:NN)"
   `);
 });
+
+test("Error.captureStackTrace should preserve async function frames in stack trace", async () => {
+  async function main() {
+    return await new Promise((_resolve, reject) => {
+      process.nextTick(() => {
+        reject(new Error("error from nextTick"));
+      });
+    }).catch((err) => {
+      Error.captureStackTrace(err);
+      throw err;
+    });
+  }
+
+  let caughtError;
+
+  await main().catch((err) => {
+    caughtError = err;
+  });
+
+  console.log(caughtError.stack);
+
+  // I don't know the exact of what the error stack should be.
+  // expect(normalizeBunSnapshot(caughtError.stack!)).toMatchInlineSnapshot(`
+  //  "Error: error from nextTick
+  //      at <anonymous> (file:NN:NN)
+  //      at processTicksAndRejections (file:NN:NN)
+  //      at async main (file:NN:NN)"
+  // `);
+
+  // but, the only requirement is that it shows processTicksAndRejections and then main
+  const hasProcessTicksAndRejections = caughtError.stack!.includes("processTicksAndRejections");
+  expect(hasProcessTicksAndRejections).toBe(true);
+  const mainIsAfterProcessTicksAndRejections = caughtError.stack!.split("processTicksAndRejections")[1].includes("main");
+  expect(mainIsAfterProcessTicksAndRejections).toBe(true);
+});
